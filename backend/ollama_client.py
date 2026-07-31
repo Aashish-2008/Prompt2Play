@@ -2,6 +2,10 @@ import os
 import json
 import subprocess
 import requests
+import logging
+
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
 
 OLLAMA_MODEL = os.environ.get('OLLAMA_MODEL','llama2')
 OLLAMA_HTTP = os.environ.get('OLLAMA_HTTP','http://localhost:11434')
@@ -78,9 +82,9 @@ def _repair_llm_json(raw_text: str, user_prompt: str, model: str) -> dict | None
 
     Returns parsed dict on success, or None if repair failed.
     """
-    print('REPAIR: start, raw_text_len=', len(raw_text) if raw_text else 0)
+    logger.info(f'_repair_llm_json: starting with raw_text_len={len(raw_text) if raw_text else 0}')
     if not raw_text:
-        print('REPAIR: no raw_text -> return None')
+        logger.info('_repair_llm_json: no raw_text provided, returning None')
         return None
     repair_instruction = (
         "The model produced malformed or non-JSON output. Here is the raw output enclosed.\n\n"
@@ -105,10 +109,10 @@ def _repair_llm_json(raw_text: str, user_prompt: str, model: str) -> dict | None
                 try:
                     resp = requests.post(url, json=payload, stream=True, timeout=8)
                 except TypeError as te:
-                    print('REPAIR: requests.post TypeError on json, retrying with data payload:', te)
+                    logger.debug(f'_repair_llm_json: requests.post TypeError on json, retrying with data payload: {te}')
                     resp = requests.post(url, data=json.dumps(payload), headers={'Content-Type':'application/json'}, stream=True, timeout=8)
         except Exception as e:
-            print('REPAIR: http request failed payload', idx, 'err', e)
+            logger.debug(f'_repair_llm_json: http request failed payload {idx}: {e}')
             continue
         assembled = ''
         try:
@@ -125,13 +129,13 @@ def _repair_llm_json(raw_text: str, user_prompt: str, model: str) -> dict | None
                 except Exception:
                     assembled += raw
         except Exception as e:
-            print('REPAIR: stream iter_lines failed:', e)
+            logger.debug(f'_repair_llm_json: stream iter_lines failed: {e}')
             try:
                 assembled = resp.text
             except Exception:
                 assembled = ''
         t = (assembled or '').strip()
-        print('REPAIR: assembled repr=', repr(assembled)[:200])
+        logger.debug(f'_repair_llm_json: assembled text (first 200 chars): {repr(t)[:200]}')
         if not t:
             try:
                 j = resp.json()
@@ -142,35 +146,36 @@ def _repair_llm_json(raw_text: str, user_prompt: str, model: str) -> dict | None
                         t = j.get('output','')
             except Exception:
                 t = resp.text if hasattr(resp, 'text') else ''
-        print('REPAIR: candidate text snippet=', repr(t)[:200])
+        logger.debug(f'_repair_llm_json: candidate text snippet (first 200 chars): {repr(t)[:200]}')
         if t:
             try:
                 parsed = json.loads(t)
                 if isinstance(parsed, dict):
-                    print('REPAIR: parsed full text as json')
+                    logger.info('_repair_llm_json: successfully parsed full text as JSON')
                     return parsed
             except Exception:
                 candidate = extract_first_json(t)
-                print('REPAIR: extract_first_json returned:', candidate)
+                logger.debug(f'_repair_llm_json: extract_first_json returned candidate length: {len(candidate) if candidate else 0}')
                 if candidate:
                     try:
                         parsed = json.loads(candidate)
                         if isinstance(parsed, dict):
-                            print('REPAIR: parsed candidate json')
+                            logger.info('_repair_llm_json: successfully parsed extracted candidate JSON')
                             return parsed
                     except Exception as e:
-                        print('REPAIR: parsing candidate failed', e)
+                        logger.debug(f'_repair_llm_json: parsing candidate failed: {e}')
                         pass
     # CLI fallback for repair
     try:
         cmd = ['ollama','run', model, repair_instruction]
         res = subprocess.run(cmd, capture_output=True, text=True, timeout=8)
         out = (res.stdout or res.stderr or '').strip()
-        print('REPAIR: CLI out repr=', repr(out)[:200])
+        logger.debug(f'_repair_llm_json: CLI output (first 200 chars): {repr(out)[:200]}')
         if out:
             try:
                 parsed = json.loads(out)
                 if isinstance(parsed, dict):
+                    logger.info('_repair_llm_json: CLI fallback successfully parsed JSON')
                     return parsed
             except Exception:
                 candidate = extract_first_json(out)
@@ -178,13 +183,14 @@ def _repair_llm_json(raw_text: str, user_prompt: str, model: str) -> dict | None
                     try:
                         parsed = json.loads(candidate)
                         if isinstance(parsed, dict):
+                            logger.info('_repair_llm_json: CLI fallback successfully parsed extracted candidate JSON')
                             return parsed
                     except Exception:
                         pass
     except Exception as e:
-        print('REPAIR: CLI fallback failed', e)
+        logger.debug(f'_repair_llm_json: CLI fallback failed: {e}')
         pass
-    print('REPAIR: failed to repair -> return None')
+    logger.warning('_repair_llm_json: all repair attempts failed, returning None')
     return None
 
 
@@ -195,12 +201,14 @@ def analyze_prompt(prompt: str, strict: bool = False) -> dict:
     then extract and parse a JSON object. If parsing fails, it attempts an automatic repair call asking the model to output valid JSON.
     If repair also fails, returns a merged fallback that includes rule-based defaults to vary output by prompt.
     """
+    logger.info(f'analyze_prompt: starting for prompt (len={len(prompt)}), strict={strict}')
     structured_prompt = build_structured_prompt(prompt, strict=strict)
     model = OLLAMA_MODEL
     # If configured model is missing, try to pick an installed model
     detected = pick_default_model()
     if detected:
         model = detected
+        logger.info(f'analyze_prompt: detected model {model}')
 
     # Try HTTP API with streaming assembly
     try:
@@ -209,10 +217,12 @@ def analyze_prompt(prompt: str, strict: bool = False) -> dict:
             {'model': model, 'prompt': structured_prompt},
             {'model': model, 'messages': [{'role': 'user', 'content': structured_prompt}]},
         ]
-        for payload in payloads:
+        for idx, payload in enumerate(payloads):
             try:
+                logger.debug(f'analyze_prompt: trying payload {idx}')
                 resp = requests.post(url, json=payload, stream=True, timeout=10)
-            except Exception:
+            except Exception as e:
+                logger.debug(f'analyze_prompt: payload {idx} failed: {e}')
                 continue
 
             assembled = ''
@@ -233,14 +243,16 @@ def analyze_prompt(prompt: str, strict: bool = False) -> dict:
                     except Exception:
                         # Not JSON per-line, append raw text
                         assembled += raw
-            except Exception:
+            except Exception as e:
                 # If streaming iter_lines fails, fall back to full-text
+                logger.debug(f'analyze_prompt: streaming iter_lines failed: {e}')
                 try:
                     assembled = resp.text
                 except Exception:
                     assembled = ''
 
             t = (assembled or '').strip()
+            logger.debug(f'analyze_prompt: assembled response (len={len(t)})')
             if not t:
                 # try non-stream path
                 try:
@@ -267,6 +279,7 @@ def analyze_prompt(prompt: str, strict: bool = False) -> dict:
                 try:
                     parsed = json.loads(t)
                     if isinstance(parsed, dict):
+                        logger.info('analyze_prompt: direct JSON parse succeeded')
                         parsed['prompt'] = prompt
                         parsed['llm_raw'] = t
                         # fill missing keys from rules
@@ -281,6 +294,7 @@ def analyze_prompt(prompt: str, strict: bool = False) -> dict:
                         try:
                             parsed = json.loads(candidate)
                             if isinstance(parsed, dict):
+                                logger.info('analyze_prompt: extracted JSON parse succeeded')
                                 parsed['prompt'] = prompt
                                 parsed['llm_raw'] = t
                                 # Fill missing keys with defaults
@@ -291,8 +305,10 @@ def analyze_prompt(prompt: str, strict: bool = False) -> dict:
                         except Exception:
                             pass
                     # Attempt to auto-repair using the raw LLM text
+                    logger.info('analyze_prompt: attempting automatic repair')
                     repaired = _repair_llm_json(t, prompt, model)
                     if repaired and isinstance(repaired, dict):
+                        logger.info('analyze_prompt: repair succeeded')
                         # merge repaired with defaults
                         for k, v in basic_rule_parse(prompt).items():
                             if k not in repaired or repaired.get(k) is None:
@@ -301,6 +317,7 @@ def analyze_prompt(prompt: str, strict: bool = False) -> dict:
                         repaired['llm_raw'] = t
                         return repaired
                     # unable to parse -> return merged fallback with rule defaults
+                    logger.warning('analyze_prompt: all parsing strategies failed, using fallback')
                     fallback = basic_rule_parse(prompt)
                     fallback.update({'analysis': t, 'llm_raw': t, 'prompt': prompt})
                     return fallback
@@ -309,23 +326,28 @@ def analyze_prompt(prompt: str, strict: bool = False) -> dict:
 
     # Try CLI fallback: try a couple of 'ollama run' invocation patterns
     try:
+        logger.info('analyze_prompt: attempting CLI fallback')
         candidates = [
             ['ollama','run', model, structured_prompt],
             ['ollama','run', model, '--format','json', structured_prompt],
             ['ollama','generate', model, structured_prompt],
         ]
-        for cmd in candidates:
+        for cmd_idx, cmd in enumerate(candidates):
             try:
+                logger.debug(f'analyze_prompt: trying CLI cmd {cmd_idx}: {cmd[0]} {cmd[1]}')
                 res = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
             except FileNotFoundError:
                 # ollama not installed
+                logger.warning('analyze_prompt: ollama CLI not found')
                 raise
             out = (res.stdout or res.stderr or '').strip()
             if out:
+                logger.debug(f'analyze_prompt: CLI output received (len={len(out)})')
                 # Attempt same JSON extraction on CLI output
                 try:
                     parsed = json.loads(out)
                     if isinstance(parsed, dict):
+                        logger.info('analyze_prompt: CLI direct JSON parse succeeded')
                         parsed['prompt'] = prompt
                         parsed['llm_raw'] = out
                         for k, v in basic_rule_parse(prompt).items():
@@ -338,6 +360,7 @@ def analyze_prompt(prompt: str, strict: bool = False) -> dict:
                         try:
                             parsed = json.loads(candidate)
                             if isinstance(parsed, dict):
+                                logger.info('analyze_prompt: CLI extracted JSON parse succeeded')
                                 parsed['prompt'] = prompt
                                 parsed['llm_raw'] = out
                                 for k, v in basic_rule_parse(prompt).items():
@@ -347,25 +370,31 @@ def analyze_prompt(prompt: str, strict: bool = False) -> dict:
                         except Exception:
                             pass
                     # try repair via CLI output
+                    logger.info('analyze_prompt: attempting CLI repair')
                     repaired = _repair_llm_json(out, prompt, model)
                     if repaired and isinstance(repaired, dict):
+                        logger.info('analyze_prompt: CLI repair succeeded')
                         for k, v in basic_rule_parse(prompt).items():
                             if k not in repaired or repaired.get(k) is None:
                                 repaired[k] = v
                         repaired['prompt'] = prompt
                         repaired['llm_raw'] = out
                         return repaired
+                    logger.warning('analyze_prompt: CLI all strategies failed, using fallback')
                     fallback = basic_rule_parse(prompt)
                     fallback.update({'analysis': out, 'llm_raw': out, 'prompt': prompt})
                     return fallback
     except FileNotFoundError:
         # CLI missing — fall through to rule-based parse
+        logger.info('analyze_prompt: ollama CLI not available, using rule-based fallback')
         pass
-    except Exception:
+    except Exception as e:
         # Any other issue — fall through
+        logger.debug(f'analyze_prompt: CLI fallback exception: {e}')
         pass
 
     # Final fallback: rule-based parse
+    logger.warning('analyze_prompt: all strategies failed, using pure rule-based fallback')
     spec = basic_rule_parse(prompt)
     return spec
 
