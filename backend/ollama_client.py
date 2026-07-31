@@ -11,29 +11,60 @@ OLLAMA_MODEL = os.environ.get('OLLAMA_MODEL','llama2')
 OLLAMA_HTTP = os.environ.get('OLLAMA_HTTP','http://localhost:11434')
 
 
-def build_structured_prompt(user_prompt: str, strict: bool = False) -> str:
-    """Wrap user text with instructions asking the model to output strict JSON only, with few-shot examples.
+REFERENCES = [
+    "https://discussions.unity.com/t/game-ideas-777316/777316",
+    "https://forum.gamemaker.io/index.php?threads/small-world-exploration-in-2d.146/",
+    "https://forum.greenheartgames.com/t/making-2d-game-development-game/16404",
+]
 
-    If strict=True, add an explicit instruction to emit ONLY the JSON object on a single line and nothing else.
+
+def build_structured_prompt(user_prompt: str, strict: bool = False) -> str:
+    """Create a stronger structured instruction asking the model to produce a rich JSON spec.
+
+    The desired JSON schema:
+      {
+        title: string,
+        genre: string,
+        game_type: string,             # e.g., Hole, Shooter, Puzzle, Platformer
+        mechanics: [string],           # short list e.g., ["physics","gravity","timer"]
+        entities: [                    # list of entity descriptors
+          { name, role, type, behavior, color, shape }
+        ],
+        assets: [                      # list of asset hints – simple shapes or references
+          { name, type, hint }
+        ],
+        player_color: string,          # hex
+        enemy_color: string,           # hex
+        theme: string,
+        instructions: string,
+        prompt: string                 # original prompt for provenance
+      }
+
+    The prompt includes reference URLs to ground the model in 2D game ideas.
+    If strict=True, insist on a single-line JSON object only.
     """
     examples = (
         "Example 1:\n"
-        "{\n  \"title\": \"Haunted Run\",\n  \"genre\": \"Platformer\",\n  \"player_color\": \"#8b5cf6\",\n  \"enemy_color\": \"#f97316\",\n  \"theme\": \"Spooky platformer\",\n  \"instructions\": \"Use arrow keys to move, Space to jump.\"\n}\n\n"
+        "{\n  \"title\": \"Haunted Run\",\n  \"genre\": \"Platformer\",\n  \"game_type\": \"Platformer\",\n  \"mechanics\": [\"jump\", \"moving platforms\"],\n  \"entities\": [{\"name\":\"zombie\",\"role\":\"enemy\",\"type\":\"npc\",\"behavior\":\"patrol\",\"color\":\"#8b5cf6\",\"shape\":\"square\"}],\n  \"assets\": [{\"name\":\"player_sprite\",\"type\":\"svg_hint\",\"hint\":\"small rounded circle with eyes\"}],\n  \"player_color\": \"#8b5cf6\",\n  \"enemy_color\": \"#f97316\",\n  \"theme\": \"Spooky platformer\",\n  \"instructions\": \"Use arrow keys to move, Space to jump.\",\n  \"prompt\": \"A spooky platformer with zombies and moving platforms\"\n}\n\n"
         "Example 2:\n"
-        "{\n  \"title\": \"Space Blaster\",\n  \"genre\": \"Shooter\",\n  \"player_color\": \"#00aaff\",\n  \"enemy_color\": \"#ff4444\",\n  \"theme\": \"Top-down space shooter\",\n  \"instructions\": \"Move with arrows, press Space to shoot.\"\n}\n\n"
+        "{\n  \"title\": \"Space Blaster\",\n  \"genre\": \"Shooter\",\n  \"game_type\": \"Shooter\",\n  \"mechanics\": [\"top-down\", \"waves\"],\n  \"entities\": [{\"name\":\"alien\",\"role\":\"enemy\",\"type\":\"projectile\",\"behavior\":\"seek\",\"color\":\"#ff4444\",\"shape\":\"triangle\"}],\n  \"assets\": [{\"name\":\"ship\",\"type\":\"svg_hint\",\"hint\":\"small triangle ship, blue\"}],\n  \"player_color\": \"#00aaff\",\n  \"enemy_color\": \"#ff4444\",\n  \"theme\": \"Top-down space shooter\",\n  \"instructions\": \"Move with arrows, press Space to shoot.\",\n  \"prompt\": \"Top-down space shooter defending against alien waves\"\n}\n\n"
     )
+
+    refs = "\nReference examples and inspiration:\n" + "\n".join(REFERENCES) + "\n\n"
+
     base = (
-        "You are a JSON generator. Convert the user's game description into a single valid JSON object "
-        "with these keys: title (string), genre (string), player_color (hex like '#rrggbb'), "
-        "enemy_color (hex), theme (short string), instructions (short string).\n"
+        "You are a JSON generator for a tool that turns a single natural-language prompt into a playable 2D prototype.\n"
+        "Produce a single valid JSON object that exactly matches the schema described above.\n"
+        "Be concrete: list mechanics, named entities with roles and behaviors, and asset hints that can be procedurally generated (shapes/colors).\n"
+        "Include the original prompt in the 'prompt' field.\n"
         "Output ONLY the JSON object, no explanation, no markdown.\n\n"
         + examples
+        + refs
         + "Now produce the JSON for the following user description:\n" + user_prompt
     )
     if strict:
-        # Stronger nudge to produce only JSON and nothing else
         base = (
-            "Respond with a single valid JSON object only on one line. Do not include any surrounding text, explanation, or code fences. "
+            "STRICT: Respond with a single valid JSON object only on one line. Do not include any surrounding text or commentary. "
             + base
             + "\nIf you cannot produce exact JSON, reply with a single line containing ONLY the exact JSON object."
         )
@@ -90,8 +121,9 @@ def _repair_llm_json(raw_text: str, user_prompt: str, model: str) -> dict | None
         "The model produced malformed or non-JSON output. Here is the raw output enclosed.\n\n"
         "----BEGIN RAW OUTPUT----\n" + raw_text + "\n----END RAW OUTPUT----\n\n"
         "Using the user's original description:\n" + user_prompt + "\n\n"
-        "Produce a single VALID JSON object with ONLY these keys: title (string), genre (string), player_color (hex #rrggbb), "
-        "enemy_color (hex), theme (short string), instructions (short string). Output ONLY the JSON object and nothing else."
+        "Produce a single VALID JSON object that matches this rich schema exactly:\n"
+        "{ title, genre, game_type, mechanics (array), entities (array of {name, role, type, behavior, color, shape}), assets (array of {name,type,hint}), player_color, enemy_color, theme, instructions, prompt }\n"
+        "Be concrete: enumerate mechanics and provide at least one entity and one asset hint. Output ONLY the JSON object and nothing else."
     )
     url = OLLAMA_HTTP.rstrip('/') + '/api/generate'
     payloads = [
@@ -400,13 +432,97 @@ def analyze_prompt(prompt: str, strict: bool = False) -> dict:
 
 
 def basic_rule_parse(prompt: str) -> dict:
-    # Very small heuristic parser
-    p = prompt.lower()
-    spec = {'prompt': prompt, 'title': None, 'genre': None, 'player_color':'#4f46e5', 'enemy_color':'#ef4444', 'theme':None, 'instructions':None}
-    if 'zombie' in p:
-        spec.update({'title':'Zombie Survival', 'genre':'Shooter', 'theme':'Survive waves of zombies.', 'instructions':'Move with ← → or A/D. Press Space to shoot.'})
-    elif 'space' in p or 'alien' in p:
-        spec.update({'title':'Space Blaster','genre':'Space Shooter','theme':'Blow up alien ships','instructions':'Move and shoot to defend your ship.'})
-    else:
-        spec.update({'title':'Arcade Mini','genre':'Arcade','theme':'Quick arcade action','instructions':'Arrow keys to move, Space to shoot.'})
+    """Heuristic spec builder when LLM output fails. Returns a richer spec aligned with the expanded schema.
+
+    The goal is to avoid returning a single boring default. Map keywords to mechanics, entities and assets so
+    the generator has enough information to produce varied outputs.
+    """
+    p = (prompt or '').lower()
+    # defaults
+    spec = {
+        'prompt': prompt,
+        'title': None,
+        'genre': None,
+        'game_type': None,
+        'mechanics': [],
+        'entities': [],
+        'assets': [],
+        'player_color': '#4f46e5',
+        'enemy_color': '#ef4444',
+        'theme': None,
+        'instructions': None,
+    }
+
+    # hole-like keywords
+    if any(k in p for k in ['hole', 'abyss', 'swallow', 'hole.io', 'growing hole']):
+        spec.update({
+            'title': 'The Growing Abyss',
+            'genre': 'Arcade',
+            'game_type': 'Hole',
+            'mechanics': ['mouse-move', 'swallow', 'growth'],
+            'entities': [
+                {'name': 'pebble', 'role': 'collectible', 'type': 'object', 'behavior': 'drift', 'color': '#ffd58a', 'shape': 'circle'},
+                {'name': 'building', 'role': 'large', 'type': 'obstacle', 'behavior': 'static', 'color': '#ff7b7b', 'shape': 'square'},
+            ],
+            'assets': [{'name': 'basic_orb', 'type': 'svg_hint', 'hint': 'simple dark circle with soft rim'}],
+            'player_color': '#000000',
+            'enemy_color': '#ff6b00',
+            'theme': 'Grow by swallowing objects',
+            'instructions': 'Move the hole with mouse; swallow objects to grow.'
+        })
+        return spec
+
+    # shooter keywords
+    if any(k in p for k in ['shoot', 'zombie', 'alien', 'shooter', 'waves', 'space']):
+        spec.update({
+            'title': 'Wave Defender',
+            'genre': 'Shooter',
+            'game_type': 'Shooter',
+            'mechanics': ['top-down', 'shooting', 'waves'],
+            'entities': [
+                {'name': 'player', 'role': 'player', 'type': 'ship', 'behavior': 'controlled', 'color': '#00aaff', 'shape': 'triangle'},
+                {'name': 'enemy', 'role': 'enemy', 'type': 'npc', 'behavior': 'wander_shoot', 'color': '#ff4444', 'shape': 'triangle'},
+            ],
+            'assets': [{'name':'ship','type':'svg_hint','hint':'small pointed triangle ship, blue'}],
+            'player_color': '#00aaff',
+            'enemy_color': '#ff4444',
+            'theme': 'Defend against waves of enemies',
+            'instructions': 'Move with arrows or A/D; Space to shoot.'
+        })
+        return spec
+
+    # puzzle keywords
+    if any(k in p for k in ['puzzle', 'drop', 'route', 'keys', 'lava', 'water']):
+        spec.update({
+            'title': 'Underground Puzzle',
+            'genre': 'Puzzle',
+            'game_type': 'Puzzle',
+            'mechanics': ['gravity', 'puzzle', 'routing'],
+            'entities': [
+                {'name':'key','role':'goal','type':'collectible','behavior':'static','color':'#ffd700','shape':'circle'},
+                {'name':'block','role':'obstacle','type':'tile','behavior':'static','color':'#888','shape':'square'},
+            ],
+            'assets':[{'name':'key','type':'svg_hint','hint':'small golden key icon'}],
+            'player_color':'#6ee7b7',
+            'enemy_color':'#f472b6',
+            'theme':'Solve gravity puzzles to route objects',
+            'instructions':'Drag or click to move holes and route objects to targets.'
+        })
+        return spec
+
+    # default varied arcade fallback
+    spec.update({
+        'title': 'Arcade Mini',
+        'genre': 'Arcade',
+        'game_type': 'Arcade',
+        'mechanics': ['arcade','score'],
+        'entities': [
+            {'name':'orb','role':'collectible','type':'object','behavior':'drift','color':'#ffd58a','shape':'circle'}
+        ],
+        'assets':[{'name':'orb','type':'svg_hint','hint':'small colored orb'}],
+        'player_color':'#4f46e5',
+        'enemy_color':'#ef4444',
+        'theme':'Quick arcade action',
+        'instructions':'Arrow keys to move, Space to act.'
+    })
     return spec
