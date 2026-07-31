@@ -12,8 +12,19 @@ def generate_game_html(spec: dict) -> str:
 
     # If the spec indicates a hole mechanic, generate the hole game.
     genre = (spec.get('genre') or '').lower()
-    if 'hole' in genre or spec.get('game_type') == 'hole' or 'black hole' in genre:
+    if 'hole' in genre or spec.get('game_type', '').lower() == 'hole' or 'black hole' in genre:
         return generate_hole_game_html(spec)
+
+    # determine enemy shape from spec.entities if available
+    enemy_shape = 'square'
+    player_shape = 'circle'
+    try:
+        ents = spec.get('entities') or []
+        if ents and isinstance(ents, list):
+            e0 = ents[0]
+            enemy_shape = (e0.get('shape') or e0.get('type') or 'square').lower()
+    except Exception:
+        pass
 
     template = '''<!doctype html>
 <html>
@@ -40,6 +51,7 @@ def generate_game_html(spec: dict) -> str:
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
 const W = canvas.width, H = canvas.height;
+const ENEMY_SHAPE = '__ENEMY_SHAPE__';
 
 let keys = {};
 window.addEventListener('keydown', e=>keys[e.code]=true);
@@ -47,8 +59,18 @@ window.addEventListener('keyup', e=>keys[e.code]=false);
 
 actionStart();
 
+function drawEnemyShape(ctx, x, y, size, shape){
+  if(shape === 'triangle' || shape === 'tri'){
+    ctx.beginPath(); ctx.moveTo(x, y-size); ctx.lineTo(x-size, y+size); ctx.lineTo(x+size, y+size); ctx.closePath(); ctx.fill();
+  } else if(shape === 'circle' || shape === 'round'){
+    ctx.beginPath(); ctx.arc(x,y,size,0,Math.PI*2); ctx.fill();
+  } else {
+    ctx.fillRect(x-size, y-size, size*2, size*2);
+  }
+}
+
 function actionStart(){
-  let player = {x:W/2,y:H-60,w:28,h:28,spd:5,color:'__PLAYER_COLOR__'};
+  let player = {x:W/2,y:H-60,spd:5,color:'__PLAYER_COLOR__'};
   let bullets = [];
   let enemies = [];
   let score = 0;
@@ -56,7 +78,7 @@ function actionStart(){
 
   function spawnEnemy(){
     const x = Math.random()*(W-40)+20;
-    enemies.push({x,y:0+20,w:28,h:28,spd:1.2+Math.random()*1.2,color:'__ENEMY_COLOR__'});
+    enemies.push({x,xY:0,y:0,size:16,spd:1.2+Math.random()*1.2,color:'__ENEMY_COLOR__'});
   }
   for(let i=0;i<6;i++) spawnEnemy();
 
@@ -86,7 +108,7 @@ function actionStart(){
       // hit by bullet
       for(let j=bullets.length-1;j>=0;j--){
         const b = bullets[j];
-        if(b.x > e.x - e.w && b.x < e.x + e.w && b.y > e.y - e.h && b.y < e.y + e.h){
+        if(b.x > e.x - e.size && b.x < e.x + e.size && b.y > e.y - e.size && b.y < e.y + e.size){
           enemies.splice(i,1); bullets.splice(j,1); score += 10; spawnEnemy(); break;
         }
       }
@@ -105,7 +127,7 @@ function actionStart(){
     // bullets
     for(let b of bullets){ ctx.fillStyle='#fff'; ctx.fillRect(b.x-3,b.y-12,b.w,b.h); }
     // enemies
-    for(let e of enemies){ ctx.fillStyle=e.color; ctx.fillRect(e.x-14,e.y-14,e.w,e.h); }
+    for(let e of enemies){ ctx.fillStyle=e.color; drawEnemyShape(ctx, e.x, e.y, e.size, ENEMY_SHAPE); }
 
     // HUD
     ctx.fillStyle='#e6eef8'; ctx.font='18px sans-serif'; ctx.fillText('Score: '+score, 12, 26);
@@ -123,7 +145,7 @@ function actionStart(){
     safe_title = _html.escape(str(title))
     safe_theme = _html.escape(str(theme))
     safe_instructions = _html.escape(str(instructions))
-    html = template.replace('__TITLE__', safe_title).replace('__PLAYER_COLOR__', player_color).replace('__ENEMY_COLOR__', enemy_color).replace('__THEME__', safe_theme).replace('__INSTRUCTIONS__', safe_instructions)
+    html = template.replace('__TITLE__', safe_title).replace('__PLAYER_COLOR__', player_color).replace('__ENEMY_COLOR__', enemy_color).replace('__THEME__', safe_theme).replace('__INSTRUCTIONS__', safe_instructions).replace('__ENEMY_SHAPE__', enemy_shape)
     return html
 
 
