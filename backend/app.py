@@ -100,6 +100,17 @@ def api_generate():
         strict = bool(data.get('strict', False))
         spec = analyze_prompt(prompt, strict=strict)
 
+    # Allow frontend to pass an explicit game_type (template selector)
+    game_type = data.get('game_type')
+    if game_type:
+        try:
+            spec['game_type'] = game_type
+            # if genre not set, use game_type as genre to influence generator
+            if not spec.get('genre'):
+                spec['genre'] = game_type
+        except Exception:
+            pass
+
     # Generate a playable HTML5 game using the spec
     html = generate_game_html(spec)
     ts = int(time.time())

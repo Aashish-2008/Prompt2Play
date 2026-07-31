@@ -24,6 +24,13 @@
         <p class="text-slate-400 mb-4">Type a short prompt like "Create a zombie survival game" and get a playable prototype.</p>
         <textarea id="prompt" rows="4" class="w-full p-3 rounded bg-slate-800 text-slate-100" placeholder="E.g., A top-down zombie survival where you collect ammo and survive waves"></textarea>
         <div class="mt-4 flex items-center gap-3">
+          <label class="text-sm mt-1">Template:</label>
+          <select id="gameType" class="p-2 rounded bg-slate-800 text-slate-100">
+            <option value="">Auto</option>
+            <option value="Shooter">Shooter</option>
+            <option value="Hole">Hole</option>
+            <option value="Puzzle">Puzzle</option>
+          </select>
           <button id="generate" class="px-4 py-2 bg-emerald-500 rounded text-slate-900 font-semibold">Generate</button>
           <button id="strictRetry" class="px-4 py-2 bg-amber-500 rounded text-slate-900" title="Retry using a stricter JSON-only prompt">Retry JSON</button>
           <button id="download" class="px-4 py-2 bg-slate-700 rounded text-slate-200" disabled>Download</button>
@@ -206,7 +213,7 @@ generateBtn.onclick = async ()=>{
   showSpinner('Generating...');
   generateBtn.disabled = true; promptEl.disabled = true; if(strictBtn) strictBtn.disabled = true; document.getElementById('download').disabled = true;
   try{
-    const res = await fetch('/api/generate', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({prompt})});
+    const res = await fetch('/api/generate', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({prompt, game_type: document.getElementById('gameType').value})});
     const j = await res.json();
     if(res.ok){
       // update preview only after success
@@ -345,7 +352,7 @@ if(strictBtn){
     showSpinner('Retrying with strict JSON prompt...');
     strictBtn.disabled = true; generateBtn.disabled = true; promptEl.disabled = true; document.getElementById('download').disabled = true;
     try{
-      const res = await fetch('/api/generate', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({prompt, strict: true})});
+      const res = await fetch('/api/generate', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({prompt, strict: true, game_type: document.getElementById('gameType').value})});
       const j = await res.json();
       if(res.ok){
         document.getElementById('statusText').textContent = 'Ready — preview updated';
