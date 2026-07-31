@@ -1,0 +1,378 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Prompt2Play — One Prompt, One Playable Game</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gradient-to-b from-slate-900 to-slate-800 text-slate-100 min-h-screen">
+  <div class="max-w-6xl mx-auto py-8 px-6">
+    <header class="flex items-center justify-between mb-6">
+      <h1 class="text-3xl font-semibold">Prompt2Play</h1>
+      <div id="authArea" class="flex items-center gap-3 text-sm">
+        <span id="userBadge" class="hidden px-3 py-1 bg-slate-700 rounded"></span>
+        <button id="btnShowLogin" class="px-3 py-1 bg-emerald-500 text-slate-900 rounded">Login</button>
+        <button id="btnShowRegister" class="px-3 py-1 bg-slate-600 text-slate-100 rounded">Register</button>
+        <button id="btnLogout" class="px-3 py-1 bg-slate-700 text-slate-100 rounded hidden">Logout</button>
+      </div>
+    </header>
+
+    <main class="grid grid-cols-1 lg:grid-cols-4 gap-6">
+      <section class="lg:col-span-3 bg-slate-900/60 p-6 rounded-lg shadow-lg">
+        <h2 class="text-xl font-medium mb-2">Describe the game</h2>
+        <p class="text-slate-400 mb-4">Type a short prompt like "Create a zombie survival game" and get a playable prototype.</p>
+        <textarea id="prompt" rows="4" class="w-full p-3 rounded bg-slate-800 text-slate-100" placeholder="E.g., A top-down zombie survival where you collect ammo and survive waves"></textarea>
+        <div class="mt-4 flex items-center gap-3">
+          <button id="generate" class="px-4 py-2 bg-emerald-500 rounded text-slate-900 font-semibold">Generate</button>
+          <button id="strictRetry" class="px-4 py-2 bg-amber-500 rounded text-slate-900" title="Retry using a stricter JSON-only prompt">Retry JSON</button>
+          <button id="download" class="px-4 py-2 bg-slate-700 rounded text-slate-200" disabled>Download</button>
+                  <div id="status" class="text-slate-300 ml-3 flex items-center gap-2">
+                    <svg id="spinner" class="hidden animate-spin h-5 w-5 text-emerald-400" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path></svg>
+                    <span id="statusText"></span>
+                  </div>
+                </div>
+
+        <div class="mt-6">
+          <h3 class="text-lg mb-2">Preview</h3>
+          <iframe id="preview" src="about:blank" class="w-full h-[520px] bg-black rounded border-2 border-slate-700"></iframe>
+          <div id="specPanel" class="mt-4 bg-slate-800 p-3 rounded text-sm text-slate-200 hidden">
+            <div class="flex items-center justify-between mb-2">
+              <div class="font-medium">LLM / Spec details</div>
+                          <div class="flex items-center gap-2">
+                            <button id="editSpecBtn" class="px-2 py-1 bg-sky-600 rounded text-xs">Edit Spec</button>
+                            <button id="toggleSpecRaw" class="px-2 py-1 bg-slate-700 rounded text-xs">Show raw LLM</button>
+                          </div>
+                        </div>
+            <div id="specFields" class="mb-2"></div>
+            <pre id="specRaw" class="whitespace-pre-wrap text-xs bg-black/60 p-2 rounded hidden" style="max-height:240px; overflow:auto;"></pre>
+          </div>
+        </div>
+      </section>
+
+      <aside class="bg-slate-900/60 p-6 rounded-lg shadow-lg">
+        <h3 class="text-lg font-medium mb-2">Your Projects</h3>
+        <div id="projectsList" class="text-slate-300 text-sm space-y-3">
+          <p class="text-slate-500">Login to save projects and view history.</p>
+        </div>
+        <div class="mt-4 border-t border-slate-800 pt-4 text-slate-400 text-sm">
+          <p><strong>One Prompt → One Playable Game</strong></p>
+          <p class="mt-2">Uses Ollama as the local LLM engine. No API keys required.</p>
+        </div>
+      </aside>
+    </main>
+
+    <footer class="mt-8 text-center text-slate-500 text-sm">Prompt2Play — generated prototype • Local Ollama required</footer>
+  </div>
+
+  <!-- Simple login/register modals -->
+  <div id="modal" class="fixed inset-0 bg-black/60 hidden items-center justify-center">
+    <div class="bg-slate-900 p-6 rounded w-full max-w-md">
+      <h3 id="modalTitle" class="text-lg font-medium mb-3">Login</h3>
+      <div id="modalBody"></div>
+      <div class="mt-4 text-right">
+        <button id="modalCancel" class="px-3 py-1 bg-slate-700 rounded mr-2">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+<script>
+// Auth + project UI
+async function fetchMe(){
+  try{
+    const res = await fetch('/api/me');
+    const j = await res.json();
+    return j.user;
+  }catch(e){ return null; }
+}
+
+function showModal(title, htmlContent){
+  document.getElementById('modalTitle').textContent = title;
+  document.getElementById('modalBody').innerHTML = htmlContent;
+  document.getElementById('modal').classList.remove('hidden');
+}
+function hideModal(){ document.getElementById('modal').classList.add('hidden'); }
+
+document.getElementById('modalCancel').onclick = hideModal;
+
+document.getElementById('btnShowLogin').onclick = ()=>{
+  showModal('Login', `
+    <div class="space-y-2">
+      <input id="loginUser" class="w-full p-2 rounded bg-slate-800 text-slate-100" placeholder="Username or email" />
+      <input id="loginPass" type="password" class="w-full p-2 rounded bg-slate-800 text-slate-100" placeholder="Password" />
+      <div class="text-right">
+        <button id="doLogin" class="px-3 py-1 bg-emerald-500 rounded text-slate-900">Login</button>
+      </div>
+    </div>
+  `);
+  setTimeout(()=>{ document.getElementById('doLogin').onclick = doLogin; }, 50);
+};
+
+document.getElementById('btnShowRegister').onclick = ()=>{
+  showModal('Register', `
+    <div class="space-y-2">
+      <input id="regUser" class="w-full p-2 rounded bg-slate-800 text-slate-100" placeholder="Username" />
+      <input id="regEmail" class="w-full p-2 rounded bg-slate-800 text-slate-100" placeholder="Email (optional)" />
+      <input id="regPass" type="password" class="w-full p-2 rounded bg-slate-800 text-slate-100" placeholder="Password" />
+      <div class="text-right">
+        <button id="doRegister" class="px-3 py-1 bg-emerald-500 rounded text-slate-900">Create account</button>
+      </div>
+    </div>
+  `);
+  setTimeout(()=>{ document.getElementById('doRegister').onclick = doRegister; }, 50);
+};
+
+async function doLogin(){
+  const username = document.getElementById('loginUser').value.trim();
+  const password = document.getElementById('loginPass').value;
+  if(!username || !password) return alert('Enter username and password');
+  const res = await fetch('/api/login',{method:'POST',headers:{'Content-Type':'application/json'},body: JSON.stringify({username,password})});
+  const j = await res.json();
+  if(res.ok){ hideModal(); await refreshAuth(); } else alert(j.error || 'Login failed');
+}
+
+async function doRegister(){
+  const username = document.getElementById('regUser').value.trim();
+  const email = document.getElementById('regEmail').value.trim();
+  const password = document.getElementById('regPass').value;
+  if(!username || !password) return alert('Enter username and password');
+  const res = await fetch('/api/register',{method:'POST',headers:{'Content-Type':'application/json'},body: JSON.stringify({username,email,password})});
+  const j = await res.json();
+  if(res.ok){ hideModal(); await refreshAuth(); } else alert(j.error || 'Register failed');
+}
+
+async function doLogout(){
+  await fetch('/api/logout',{method:'POST'});
+  await refreshAuth();
+}
+
+document.getElementById('btnLogout').onclick = doLogout;
+
+async function refreshAuth(){
+  const user = await fetchMe();
+  const badge = document.getElementById('userBadge');
+  const btnLogin = document.getElementById('btnShowLogin');
+  const btnReg = document.getElementById('btnShowRegister');
+  const btnLogout = document.getElementById('btnLogout');
+  if(user){
+    badge.textContent = user.username; badge.classList.remove('hidden');
+    btnLogin.classList.add('hidden'); btnReg.classList.add('hidden'); btnLogout.classList.remove('hidden');
+    loadProjects();
+  } else {
+    badge.classList.add('hidden'); btnLogin.classList.remove('hidden'); btnReg.classList.remove('hidden'); btnLogout.classList.add('hidden');
+    document.getElementById('projectsList').innerHTML = '<p class="text-slate-500">Login to save projects and view history.</p>';
+  }
+}
+
+async function loadProjects(){
+  const res = await fetch('/api/projects'); const j = await res.json();
+  const list = document.getElementById('projectsList');
+  list.innerHTML = '';
+  if(!j.projects || j.projects.length===0){ list.innerHTML = '<p class="text-slate-500">No projects yet — generate one.</p>'; return; }
+  for(const p of j.projects){
+    const el = document.createElement('div'); el.className = 'p-2 bg-slate-800 rounded';
+    el.innerHTML = `<div class="flex items-center justify-between"><div><div class="font-medium">${escapeHtml(p.title||'Untitled')}</div><div class="text-xs text-slate-400">${new Date(p.created_at*1000).toLocaleString()}</div></div><div><button class="px-2 py-1 bg-emerald-500 text-slate-900 rounded" onclick="openPreview('${p.filename}')">Preview</button></div></div>`;
+    list.appendChild(el);
+  }
+}
+
+function openPreview(filename){ window.open('/preview/'+filename,'_blank'); }
+
+function escapeHtml(s){ return (s||'').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;'); }
+
+// Generation logic
+const generateBtn = document.getElementById('generate');
+const promptEl = document.getElementById('prompt');
+const statusEl = document.getElementById('status');
+const preview = document.getElementById('preview');
+
+generateBtn.onclick = async ()=>{
+  const prompt = promptEl.value.trim();
+  if(!prompt){ document.getElementById('statusText').textContent = 'Please enter a prompt.'; return; }
+  const prevPreview = preview.src;
+  showSpinner('Generating...');
+  generateBtn.disabled = true; promptEl.disabled = true; if(strictBtn) strictBtn.disabled = true; document.getElementById('download').disabled = true;
+  try{
+    const res = await fetch('/api/generate', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({prompt})});
+    const j = await res.json();
+    if(res.ok){
+      // update preview only after success
+      preview.src = j.preview;
+      document.getElementById('download').disabled = false;
+      document.getElementById('download').onclick = ()=>{ window.open(j.preview, '_blank'); };
+      await loadProjects();
+
+      document.getElementById('statusText').textContent = 'Ready — preview below';
+
+      // show spec / LLM raw when available
+      const specPanel = document.getElementById('specPanel');
+      const specFields = document.getElementById('specFields');
+      const specRaw = document.getElementById('specRaw');
+      specFields.innerHTML = '';
+      if(j.spec){
+        specPanel.classList.remove('hidden');
+        // render parsed fields
+        const keys = ['title','genre','player_color','enemy_color','theme','instructions'];
+        for(const k of keys){
+          if(j.spec[k]){
+            const el = document.createElement('div'); el.innerHTML = `<strong>${k}:</strong> ${escapeHtml(String(j.spec[k]))}`;
+            specFields.appendChild(el);
+          }
+        }
+        // raw LLM if present
+        if(j.spec.llm_raw){ specRaw.textContent = j.spec.llm_raw; }
+        else { specRaw.textContent = '(no raw LLM text returned)'; }
+
+        // attach Edit Spec button behavior
+        const editSpecBtn = document.getElementById('editSpecBtn');
+        if(editSpecBtn){
+          editSpecBtn.onclick = ()=>{ openSpecEditor(j.spec); }
+        }
+      } else {
+        specPanel.classList.add('hidden');
+      }
+
+    } else {
+      document.getElementById('statusText').textContent = j.error || 'Generation failed';
+      // keep previous preview
+      preview.src = prevPreview;
+    }
+  }catch(err){
+    document.getElementById('statusText').textContent = 'Error: ' + err.message;
+    preview.src = prevPreview;
+  } finally { generateBtn.disabled = false; promptEl.disabled = false; if(strictBtn) strictBtn.disabled = false; hideSpinner(); }
+}
+
+// UI helpers: spinner and preview-preserve
+function showSpinner(text){ document.getElementById('spinner').classList.remove('hidden'); document.getElementById('statusText').textContent = text || ''; }
+function hideSpinner(){ document.getElementById('spinner').classList.add('hidden'); document.getElementById('statusText').textContent = ''; }
+
+// Spec editor modal
+function openSpecEditor(spec){
+  const body = `
+    <div class="space-y-2">
+      <textarea id="specEditor" rows="12" class="w-full p-2 rounded bg-slate-800 text-slate-100">${escapeHtml(JSON.stringify(spec, null, 2))}</textarea>
+      <div class="flex items-center gap-4">
+        <div class="flex items-center gap-2"><div class="w-6 h-6 border rounded" id="playerPreview" title="Player color preview"></div><span class="text-sm">player_color preview</span></div>
+        <div class="flex items-center gap-2"><div class="w-6 h-6 border rounded" id="enemyPreview" title="Enemy color preview"></div><span class="text-sm">enemy_color preview</span></div>
+        <div id="specValidation" class="text-sm text-amber-300 ml-4"></div>
+      </div>
+      <div class="text-right"><button id="applySpec" class="px-3 py-1 bg-emerald-500 rounded text-slate-900" disabled>Apply & Generate</button></div>
+    </div>`;
+  showModal('Edit Spec', body);
+  setTimeout(()=>{
+    const ta = document.getElementById('specEditor');
+    const applyBtn = document.getElementById('applySpec');
+    const playerPreview = document.getElementById('playerPreview');
+    const enemyPreview = document.getElementById('enemyPreview');
+    const validationEl = document.getElementById('specValidation');
+
+    function isHexColor(s){ return typeof s === 'string' && /^#([0-9a-fA-F]{6})$/.test(s.trim()); }
+    function validateParsed(p){
+      const missing = [];
+      if(!p) return ['Invalid JSON'];
+      const required = ['title','genre','player_color','enemy_color','instructions'];
+      for(const k of required){ if(!p[k] || String(p[k]).trim()==='') missing.push(k); }
+      if(p.player_color && !isHexColor(p.player_color)) missing.push('player_color (invalid hex)');
+      if(p.enemy_color && !isHexColor(p.enemy_color)) missing.push('enemy_color (invalid hex)');
+      return missing;
+    }
+
+    // live-parse on input and update previews/validation
+    let lastParsed = null;
+    ta.addEventListener('input', ()=>{
+      const raw = ta.value;
+      try{
+        const parsed = JSON.parse(raw);
+        lastParsed = parsed;
+        const issues = validateParsed(parsed);
+        if(parsed.player_color && isHexColor(parsed.player_color)) playerPreview.style.background = parsed.player_color; else playerPreview.style.background = 'transparent';
+        if(parsed.enemy_color && isHexColor(parsed.enemy_color)) enemyPreview.style.background = parsed.enemy_color; else enemyPreview.style.background = 'transparent';
+        if(issues.length===0){ validationEl.textContent = 'Looks good'; applyBtn.disabled = false; validationEl.classList.remove('text-amber-300'); validationEl.classList.add('text-emerald-400'); }
+        else { validationEl.textContent = 'Issues: ' + issues.join(', '); applyBtn.disabled = true; validationEl.classList.remove('text-emerald-400'); validationEl.classList.add('text-amber-300'); }
+      }catch(e){ lastParsed = null; playerPreview.style.background='transparent'; enemyPreview.style.background='transparent'; validationEl.textContent = 'Invalid JSON'; applyBtn.disabled = true; validationEl.classList.add('text-amber-300'); }
+    });
+
+    // trigger initial parse to populate previews/validation
+    ta.dispatchEvent(new Event('input'));
+
+    applyBtn.onclick = async ()=>{
+      const raw = ta.value;
+      let parsed = null;
+      try{ parsed = JSON.parse(raw); }catch(e){ alert('Invalid JSON: ' + e.message); return; }
+      const issues = validateParsed(parsed);
+      if(issues.length){ if(!confirm('Spec has issues: ' + issues.join(', ') + '. Continue anyway?')) return; }
+
+      hideModal();
+      // send spec to generate endpoint; preserve current preview until new one arrives
+      const prev = preview.src;
+      showSpinner('Generating from edited spec...');
+      try{
+        const res = await fetch('/api/generate', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({spec: parsed})});
+        const j = await res.json();
+        if(res.ok){ preview.src = j.preview; document.getElementById('download').disabled = false; document.getElementById('download').onclick = ()=>{ window.open(j.preview, '_blank'); }; await loadProjects();
+          // update spec panel with the returned spec
+          const specFields = document.getElementById('specFields'); const specRaw = document.getElementById('specRaw'); specFields.innerHTML = '';
+          if(j.spec){ const keys = ['title','genre','player_color','enemy_color','theme','instructions']; for(const k of keys){ if(j.spec[k]){ const el = document.createElement('div'); el.innerHTML = `<strong>${k}:</strong> ${escapeHtml(String(j.spec[k]))}`; specFields.appendChild(el); } } specRaw.textContent = j.spec.llm_raw || '(no raw LLM text returned)'; }
+        } else { alert(j.error || 'Generation failed'); preview.src = prev; }
+      }catch(err){ alert('Error: ' + err.message); preview.src = prev; }
+      finally{ hideSpinner(); }
+    };
+
+  },50);
+}
+
+// Retry JSON button - uses a stricter prompt variant
+const strictBtn = document.getElementById('strictRetry');
+if(strictBtn){
+  strictBtn.onclick = async ()=>{
+    const prompt = promptEl.value.trim();
+    if(!prompt){ document.getElementById('statusText').textContent = 'Please enter a prompt.'; return; }
+    const prevPreview = preview.src;
+    showSpinner('Retrying with strict JSON prompt...');
+    strictBtn.disabled = true; generateBtn.disabled = true; promptEl.disabled = true; document.getElementById('download').disabled = true;
+    try{
+      const res = await fetch('/api/generate', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({prompt, strict: true})});
+      const j = await res.json();
+      if(res.ok){
+        document.getElementById('statusText').textContent = 'Ready — preview updated';
+        preview.src = j.preview;
+        document.getElementById('download').disabled = false;
+        document.getElementById('download').onclick = ()=>{ window.open(j.preview, '_blank'); };
+        await loadProjects();
+
+        // update spec panel
+        const specPanel = document.getElementById('specPanel');
+        const specFields = document.getElementById('specFields');
+        const specRaw = document.getElementById('specRaw');
+        specFields.innerHTML = '';
+        if(j.spec){
+          specPanel.classList.remove('hidden');
+          const keys = ['title','genre','player_color','enemy_color','theme','instructions'];
+          for(const k of keys){ if(j.spec[k]){ const el = document.createElement('div'); el.innerHTML = `<strong>${k}:</strong> ${escapeHtml(String(j.spec[k]))}`; specFields.appendChild(el); }}
+          specRaw.textContent = j.spec.llm_raw || '(no raw LLM text returned)';
+
+          const editSpecBtn = document.getElementById('editSpecBtn'); if(editSpecBtn) editSpecBtn.onclick = ()=> openSpecEditor(j.spec);
+        } else { specPanel.classList.add('hidden'); }
+
+      } else { document.getElementById('statusText').textContent = j.error || 'Retry failed'; preview.src = prevPreview; }
+    }catch(err){ document.getElementById('statusText').textContent = 'Error: ' + err.message; preview.src = prevPreview; }
+    finally{ strictBtn.disabled = false; generateBtn.disabled = false; promptEl.disabled = false; hideSpinner(); } 
+  }
+}
+
+// toggle raw spec view
+const toggleSpecRaw = document.getElementById('toggleSpecRaw');
+if(toggleSpecRaw){
+  toggleSpecRaw.onclick = ()=>{
+    const specRaw = document.getElementById('specRaw');
+    if(specRaw.classList.contains('hidden')){ specRaw.classList.remove('hidden'); toggleSpecRaw.textContent = 'Hide raw LLM'; }
+    else { specRaw.classList.add('hidden'); toggleSpecRaw.textContent = 'Show raw LLM'; }
+  }
+}
+
+// initialize
+refreshAuth();
+</script>
+</body>
+</html>
