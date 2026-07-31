@@ -6,6 +6,9 @@ import os
 from game_generator import generate_game_html
 from ollama_client import analyze_prompt
 from db import init_db, create_user, authenticate_user, save_project, get_projects_by_user, get_user_by_id
+from godot_exporter import create_godot_zip
+from flask import send_file
+import io
 
 BASE_DIR = Path(__file__).resolve().parent
 GENERATED_DIR = BASE_DIR.parent / 'generated_games'
@@ -136,6 +139,24 @@ def preview(filename):
     if not path.exists():
         return 'Not found', 404
     return send_from_directory(str(GENERATED_DIR), filename)
+
+@app.route('/api/export_godot', methods=['POST'])
+def api_export_godot():
+    data = request.get_json() or {}
+    spec = data.get('spec')
+    prompt = data.get('prompt','')
+    if not spec:
+        if not prompt:
+            return jsonify({'error':'spec or prompt required'}), 400
+        spec = analyze_prompt(prompt, strict=bool(data.get('strict', False)))
+
+    try:
+        zbytes = create_godot_zip(spec)
+        bio = io.BytesIO(zbytes)
+        bio.seek(0)
+        return send_file(bio, mimetype='application/zip', as_attachment=True, download_name='prompt2play_godot.zip')
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 @app.route('/api/health')
 def health():

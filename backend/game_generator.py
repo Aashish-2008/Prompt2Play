@@ -129,24 +129,52 @@ function actionStart(){
 
 def generate_hole_game_html(spec: dict) -> str:
     import html as _html
+    from pathlib import Path
     title = spec.get('title') or 'The Growing Abyss'
     theme = spec.get('theme','An expanding hole swallows the world.')
     instructions = spec.get('instructions','Move the hole with the mouse. Swallow smaller objects to grow. Reach the target size to win.')
     player_color = spec.get('player_color','#000000')
     enemy_color = spec.get('enemy_color','#ff6b00')
 
-    template = '''<!doctype html>
+    # Try to inline a local SVG sprite if available for portability
+    try:
+        base_dir = Path(__file__).resolve().parents[1]
+        sprite_path = base_dir / 'frontend' / 'assets' / 'sprite.svg'
+        if sprite_path.exists():
+            embedded_sprite = sprite_path.read_text(encoding='utf-8')
+        else:
+            embedded_sprite = ''
+    except Exception:
+        embedded_sprite = ''
+
+    # small WebAudio pulse synthesizer (no external audio file required)
+    audio_js = '''
+function playPulseSound(){
+  try{
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const o = ctx.createOscillator();
+    const g = ctx.createGain();
+    o.type = 'sawtooth'; o.frequency.value = 220;
+    g.gain.value = 0.0001;
+    o.connect(g); g.connect(ctx.destination);
+    const now = ctx.currentTime; g.gain.setValueAtTime(0.0001, now); g.gain.exponentialRampToValueAtTime(0.06, now+0.01);
+    o.start(now); g.gain.exponentialRampToValueAtTime(0.0001, now+0.25); o.stop(now+0.3);
+  }catch(e){ /* ignore */ }
+}
+'''
+
+    template = f'''<!doctype html>
 <html>
 <head>
   <meta charset="utf-8" />
   <title>__TITLE__</title>
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <style>
-    html,body { height:100%; margin:0; background:#071025; color:#e6eef8; font-family:Inter,Segoe UI,Arial; }
-    #game { display:block; margin:24px auto; background:#05111b; border:6px solid #222; max-width:900px; }
-    .hud { text-align:center; padding:8px; }
-    .btn { background:#2b6cb0; color:white; padding:8px 12px; border-radius:6px; cursor:pointer; border:none; }
-    .note { font-size:0.9rem; opacity:0.9 }
+    html,body {{ height:100%; margin:0; background:#071025; color:#e6eef8; font-family:Inter,Segoe UI,Arial; }}
+    #game {{ display:block; margin:24px auto; background:#05111b; border:6px solid #222; max-width:900px; }}
+    .hud {{ text-align:center; padding:8px; }}
+    .btn {{ background:#2b6cb0; color:white; padding:8px 12px; border-radius:6px; cursor:pointer; border:none; }}
+    .note {{ font-size:0.9rem; opacity:0.9 }}
   </style>
 </head>
 <body>
@@ -158,67 +186,70 @@ def generate_hole_game_html(spec: dict) -> str:
     <div class="hud"><button id="restart" class="btn">Restart</button></div>
     <div class="hud note">Controls: Move mouse to reposition the hole. Click to create a short pulse that attracts nearby objects.</div>
   </div>
+  <!-- Embedded assets for portability -->
+  <div style="display:none">{embedded_sprite}</div>
 <script>
+{audio_js}
 // Hole.io-like simple prototype
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
 const W = canvas.width, H = canvas.height;
 
-let mouse = {x: W/2, y: H/2};
+let mouse = {{x: W/2, y: H/2}};
 let pulse = 0;
-canvas.addEventListener('mousemove', e=>{
-  const rect = canvas.getBoundingClientRect(); mouse.x = e.clientX - rect.left; mouse.y = e.clientY - rect.top; });
-canvas.addEventListener('click', e=>{ pulse = 12; });
+canvas.addEventListener('mousemove', e=>{{
+  const rect = canvas.getBoundingClientRect(); mouse.x = e.clientX - rect.left; mouse.y = e.clientY - rect.top; }});
+canvas.addEventListener('click', e=>{{ pulse = 12; playPulseSound(); }});
 
-function rand(min,max){ return min + Math.random()*(max-min); }
+function rand(min,max){{ return min + Math.random()*(max-min); }}
 
 let objects = [];
-function populate(){ objects = []; // many small items and some large
-  for(let i=0;i<80;i++){
-    const r = rand(6,18); objects.push({x:rand(r, W-r), y:rand(r, H-r), r: r, color: '#ffb86b', mass: Math.PI*r*r});
-  }
+function populate(){{ objects = []; // many small items and some large
+  for(let i=0;i<80;i++){{
+    const r = rand(6,18); objects.push({{x:rand(r, W-r), y:rand(r, H-r), r: r, color: '#ffb86b', mass: Math.PI*r*r}});
+  }}
   // bigger structures
-  for(let i=0;i<10;i++){ const r = rand(22,48); objects.push({x:rand(r,W-r), y:rand(r,H-r), r:r, color:'#ff7b7b', mass: Math.PI*r*r}); }
-}
+  for(let i=0;i<10;i++){{ const r = rand(22,48); objects.push({{x:rand(r,W-r), y:rand(r,H-r), r:r, color:'#ff7b7b', mass: Math.PI*r*r}}); }}
+}}
 
-let hole = {x: W/2, y: H/2, r: 18, area: Math.PI*18*18};
+let hole = {{x: W/2, y: H/2, r: 18, area: Math.PI*18*18}};
 let targetArea = hole.area * 10; // win condition
 let score = 0;
 let win = false;
 
-function reset(){ populate(); hole = {x: W/2, y: H/2, r: 18, area: Math.PI*18*18}; targetArea = hole.area * 10; score = 0; win=false; }
+function reset(){{ populate(); hole = {{x: W/2, y: H/2, r: 18, area: Math.PI*18*18}}; targetArea = hole.area * 10; score = 0; win=false; }}
 reset();
 
-function update(){ if(win) return;
+function update(){{ if(win) return;
   // move hole smoothly towards mouse for feel
   hole.x += (mouse.x - hole.x)*0.18; hole.y += (mouse.y - hole.y)*0.18;
   // pulse effect reduces over time
   if(pulse>0) pulse -= 0.5;
   // objects drift slightly
-  for(let obj of objects){ obj.x += (Math.random()-0.5)*0.6 + (pulse>0?(hole.x-obj.x)/200:0); obj.y += (Math.random()-0.5)*0.6 + (pulse>0?(hole.y-obj.y)/200:0); }
+  for(let obj of objects){{ obj.x += (Math.random()-0.5)*0.6 + (pulse>0?(hole.x-obj.x)/200:0); obj.y += (Math.random()-0.5)*0.6 + (pulse>0?(hole.y-obj.y)/200:0); }}
 
   // swallowing: if object center within hole radius + small margin -> remove and grow
-  for(let i=objects.length-1;i>=0;i--){ const o = objects[i]; const dx = o.x - hole.x, dy = o.y - hole.y; const dist = Math.sqrt(dx*dx+dy*dy);
-    if(dist < Math.max(4, hole.r - o.r*0.4)){
+  for(let i=objects.length-1;i>=0;i--){{ const o = objects[i]; const dx = o.x - hole.x, dy = o.y - hole.y; const dist = Math.sqrt(dx*dx+dy*dy);
+    if(dist < Math.max(4, hole.r - o.r*0.4)){{
       // swallow
       hole.area += o.mass; hole.r = Math.sqrt(hole.area/Math.PI);
       objects.splice(i,1); score += Math.round(o.mass/10);
-    }
+    }}
     // keep objects in bounds
     if(o.x < o.r) o.x = o.r; if(o.x > W-o.r) o.x = W-o.r; if(o.y<o.r) o.y=o.r; if(o.y>H-o.r) o.y=H-o.r;
-  }
+  }}
 
-  if(hole.area >= targetArea){ win = true; }
+  if(hole.area >= targetArea){{ win = true; }}
 
   // spawn tiny objects occasionally
-  if(Math.random() < 0.02) objects.push({x:rand(8,W-8), y:rand(8,H-8), r: rand(6,12), color:'#ffd58a', mass:0});
-}
+  if(Math.random() < 0.02) objects.push({{x:rand(8,W-8), y:rand(8,H-8), r: rand(6,12), color:'#ffd58a', mass:0}});
+}}
 
-function render(){ ctx.clearRect(0,0,W,H);
+function render(){{ ctx.clearRect(0,0,W,H);
   // background
   const g = ctx.createLinearGradient(0,0,0,H); g.addColorStop(0,'#041018'); g.addColorStop(1,'#081426'); ctx.fillStyle=g; ctx.fillRect(0,0,W,H);
   // objects
-  for(let o of objects){ ctx.fillStyle = o.color || '#ffa'; ctx.beginPath(); ctx.arc(o.x,o.y,o.r,0,Math.PI*2); ctx.fill(); }
+  for(let o of objects){{ ctx.fillStyle = o.color || '#ffa'; ctx.beginPath(); ctx.arc(o.x,o.y,o.r,0,Math.PI*2); ctx.fill(); }}
   // hole (draw as dark circle with soft edge)
   const grd = ctx.createRadialGradient(hole.x,hole.y, Math.max(1, hole.r*0.2), hole.x,hole.y,hole.r*1.8);
   grd.addColorStop(0,'rgba(0,0,0,1)'); grd.addColorStop(0.6,'rgba(0,0,0,0.9)'); grd.addColorStop(1,'rgba(0,0,0,0)');
@@ -227,10 +258,10 @@ function render(){ ctx.clearRect(0,0,W,H);
   ctx.strokeStyle = 'rgba(255,255,255,0.03)'; ctx.beginPath(); ctx.arc(hole.x,hole.y,hole.r*1.02,0,Math.PI*2); ctx.stroke();
   // HUD
   ctx.fillStyle='#e6eef8'; ctx.font='18px sans-serif'; ctx.fillText('Score: '+score, 12, 26); ctx.fillText('Size: '+Math.round(hole.r), 12, 52);
-  if(win){ ctx.fillStyle='rgba(0,0,0,0.6)'; ctx.fillRect(0,H/2-60,W,120); ctx.fillStyle='#fff'; ctx.font='32px sans-serif'; ctx.fillText('You grew into an Abyss — Level Cleared!', W/2-280, H/2); }
-}
+  if(win){{ ctx.fillStyle='rgba(0,0,0,0.6)'; ctx.fillRect(0,H/2-60,W,120); ctx.fillStyle='#fff'; ctx.font='32px sans-serif'; ctx.fillText('You grew into an Abyss — Level Cleared!', W/2-280, H/2); }}
+}}
 
-function loop(){ update(); render(); requestAnimationFrame(loop); }
+function loop(){{ update(); render(); requestAnimationFrame(loop); }}
 requestAnimationFrame(loop);
 
 document.getElementById('restart').onclick = reset;
