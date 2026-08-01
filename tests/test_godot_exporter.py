@@ -47,3 +47,26 @@ def test_create_godot_zip_contains_scene_and_assets():
     # there should be at least one Sprite node if any textures registered
     if asset_pngs or asset_svgs:
         assert re.search(r'type="Sprite"', main_txt) or re.search(r"\[node name=\".*\" type=\"Sprite\"", main_txt)
+
+    # If PNGs were created, prefer the largest PNG for sprite textures
+    if asset_pngs:
+        # parse ext_resource id -> path mapping
+        id_to_path = {}
+        for m in re.finditer(r'\[ext_resource path="(?P<path>[^"]+)" type="(?P<type>[^"]+)" id=(?P<id>\d+)\]', main_txt):
+            id_to_path[int(m.group('id'))] = m.group('path')
+        # find sprite texture usages (ExtResource(ids))
+        sprite_ids = [int(x) for x in re.findall(r'texture = ExtResource\((\d+)\)', main_txt)]
+        assert sprite_ids
+        # largest png name ends with _256.png if available; derive candidate path
+        largest_png = None
+        for n in asset_pngs:
+            if n.endswith('_256.png'):
+                largest_png = f'res://{n}' if n.startswith('assets/') else f'res://assets/{n}'
+                break
+        # normalize id_to_path values to compare
+        if largest_png:
+            # map paths in id_to_path may include res://assets/...
+            assert any(p.endswith('_256.png') for p in id_to_path.values())
+            # check that at least one sprite references the ext_resource id that points to the largest png
+            largest_ids = [i for i, p in id_to_path.items() if p.endswith('_256.png')]
+            assert any(sid in largest_ids for sid in sprite_ids)
