@@ -10,7 +10,10 @@ jobs:
   test-and-generate:
     runs-on: ubuntu-latest
     steps:
-            - name: Create early debug artifacts
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Create early debug artifacts
         run: |
           echo "Run ID: $GITHUB_RUN_ID" > early_debug.txt || true
           echo "Run Number: $GITHUB_RUN_NUMBER" >> early_debug.txt || true
@@ -23,6 +26,7 @@ jobs:
           path: |
             early_debug.txt
             env_dump.txt
+
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
@@ -39,7 +43,13 @@ jobs:
       - name: Install dependencies if present
         run: |
           if [ -f requirements.txt ]; then
-            python -m pip install --upgrade pip\n            pip install -r requirements.txt || true\n            pip install pytest -q\n          else\n            python -m pip install --upgrade pip\n            pip install pytest -q\n          fi
+            python -m pip install --upgrade pip
+            pip install -r requirements.txt || true
+            pip install pytest -q
+          else
+            python -m pip install --upgrade pip
+            pip install pytest -q
+          fi
 
       - name: Lint with flake8 (if configured)
         run: |
@@ -50,41 +60,57 @@ jobs:
             echo "flake8 not found; skipping lint"
           fi
 
-      - name: Run tests (if any) — produce JUnit XML
+      - name: Run tests (if any) — produce JUnit XML and logs
         run: |
           if [ -f pytest.ini ] || [ -d tests ] || ls **/*_test.py 1> /dev/null 2>&1; then
-            pytest -q --junitxml=pytest_results.xml
+            echo "Running tests with PYTHONPATH=backend"
+            PYTHONPATH=backend pytest -q --junitxml=pytest_results.xml 2>&1 | tee test_run.log
           else
-            echo "No tests found, skipping pytest"
+            echo "No tests found, skipping pytest" > test_run.log
+            echo "<?xml version='1.0' encoding='utf-8'?><testsuites><testsuite name='placeholder' tests='0'></testsuite></testsuites>" > pytest_results.xml
           fi
 
       - name: Safe demo generate (no Ollama)
         run: |
           python - <<'PY'
-import json
-from backend.game_generator import generate_game_html
-spec = {
-  'prompt': 'CI demo: small hole prototype',
-  'title': 'CI Hole Demo',
-  'genre': 'Arcade',
-  'game_type': 'Hole',
-  'mechanics': ['swallow','growth'],
-  'entities': [{'name':'stone','role':'collectible','type':'object','behavior':'drift','color':'#ffd58a','shape':'circle'}],
-  'assets': [{'name':'orb','type':'svg_hint','hint':'dark circle with rim'}],
-  'player_color': '#000000',
-  'enemy_color': '#ff6b00',
-  'theme': 'CI generated hole',
-  'instructions': 'Move the hole with the mouse.'
-}
-html = generate_game_html(spec)
-print('HTML length:', len(html))
-with open('generated_by_ci.html','w',encoding='utf-8') as f:
-    f.write(html)
-print('Wrote generated_by_ci.html')
-PY
+          import json
+          from backend.game_generator import generate_game_html
+          spec = {
+            'prompt': 'CI demo: small hole prototype',
+            'title': 'CI Hole Demo',
+            'genre': 'Arcade',
+            'game_type': 'Hole',
+            'mechanics': ['swallow','growth'],
+            'entities': [{'name':'stone','role':'collectible','type':'object','behavior':'drift','color':'#ffd58a','shape':'circle'}],
+            'assets': [{'name':'orb','type':'svg_hint','hint':'dark circle with rim'}],
+            'player_color': '#000000',
+            'enemy_color': '#ff6b00',
+            'theme': 'CI generated hole',
+            'instructions': 'Move the hole with the mouse.'
+          }
+          html = generate_game_html(spec)
+          print('HTML length:', len(html))
+          with open('generated_by_ci.html','w',encoding='utf-8') as f:
+              f.write(html)
+          print('Wrote generated_by_ci.html')
+          PY
 
-      - name: Upload generated artifact\n        uses: actions/upload-artifact@v4\n        with:\n          name: generated-demo\n          path: generated_by_ci.html\n\n      - name: Upload pytest results and logs\n        if: always()\n        uses: actions/upload-artifact@v4\n        with:\n          name: pytest-results\n          path: |\n            pytest_results.xml\n            test_run.log
+      - name: Ensure artifacts exist
+        run: |
+          if [ ! -f generated_by_ci.html ]; then echo '<!-- placeholder generated_by_ci.html -->' > generated_by_ci.html; fi
+          if [ ! -f pytest_results.xml ]; then echo '<?xml version="1.0" encoding="utf-8"?><testsuites><testsuite name="placeholder" tests="0"></testsuite></testsuites>' > pytest_results.xml; fi
 
+      - name: Upload generated artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: generated-demo
+          path: generated_by_ci.html
 
-
-
+      - name: Upload pytest results and logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pytest-results
+          path: |
+            pytest_results.xml
+            test_run.log
