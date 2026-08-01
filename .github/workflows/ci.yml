@@ -44,10 +44,10 @@ jobs:
             echo "flake8 not found; skipping lint"
           fi
 
-      - name: Run tests (if any) — fail on test failures
+      - name: Run tests (if any) — produce JUnit XML
         run: |
           if [ -f pytest.ini ] || [ -d tests ] || ls **/*_test.py 1> /dev/null 2>&1; then
-            pytest -q
+            pytest -q --junitxml=pytest_results.xml
           else
             echo "No tests found, skipping pytest"
           fi
@@ -82,3 +82,10 @@ PY
         with:
           name: generated-demo
           path: generated_by_ci.html
+
+      - name: Upload pytest results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pytest-results
+          path: pytest_results.xml
