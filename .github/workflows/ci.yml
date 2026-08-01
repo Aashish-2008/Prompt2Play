@@ -73,17 +73,7 @@ with open('generated_by_ci.html','w',encoding='utf-8') as f:
 print('Wrote generated_by_ci.html')
 PY
 
-      - name: Upload generated artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: generated-demo
-          path: generated_by_ci.html
+      - name: Upload generated artifact\n        uses: actions/upload-artifact@v4\n        with:\n          name: generated-demo\n          path: generated_by_ci.html\n\n      - name: Upload pytest results and logs\n        if: always()\n        uses: actions/upload-artifact@v4\n        with:\n          name: pytest-results\n          path: |\n            pytest_results.xml\n            test_run.log
 
-      - name: Upload pytest results
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: pytest-results
-          path: pytest_results.xml
 
 
