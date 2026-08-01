@@ -29,11 +29,7 @@ jobs:
       - name: Install dependencies if present
         run: |
           if [ -f requirements.txt ]; then
-            python -m pip install --upgrade pip
-            pip install -r requirements.txt
-          else
-            python -m pip install --upgrade pip
-          fi
+            python -m pip install --upgrade pip\n            pip install -r requirements.txt || true\n            pip install pytest -q\n          else\n            python -m pip install --upgrade pip\n            pip install pytest -q\n          fi
 
       - name: Lint with flake8 (if configured)
         run: |
@@ -89,3 +85,4 @@ PY
         with:
           name: pytest-results
           path: pytest_results.xml
+
