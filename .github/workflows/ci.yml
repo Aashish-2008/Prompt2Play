@@ -10,9 +10,19 @@ jobs:
   test-and-generate:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+            - name: Create early debug artifacts
+        run: |
+          echo "Run ID: $GITHUB_RUN_ID" > early_debug.txt || true
+          echo "Run Number: $GITHUB_RUN_NUMBER" >> early_debug.txt || true
+          env > env_dump.txt || true
 
+      - name: Upload early debug artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: early-debug
+          path: |
+            early_debug.txt
+            env_dump.txt
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
@@ -74,6 +84,7 @@ print('Wrote generated_by_ci.html')
 PY
 
       - name: Upload generated artifact\n        uses: actions/upload-artifact@v4\n        with:\n          name: generated-demo\n          path: generated_by_ci.html\n\n      - name: Upload pytest results and logs\n        if: always()\n        uses: actions/upload-artifact@v4\n        with:\n          name: pytest-results\n          path: |\n            pytest_results.xml\n            test_run.log
+
 
 
 
