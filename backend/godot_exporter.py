@@ -87,7 +87,8 @@ Contents:
 - assets/: any embedded assets from the web UI (sprite.svg, audio stubs) when available
 
 Notes:
-- Open this folder in Godot (3.x or 4.x) and inspect scenes/scripts.
+- This exporter targets Godot 3.x text scene format (format=2) for maximum compatibility.
+- Open this folder in Godot (3.x) and inspect scenes/scripts.
 - Replace placeholder visuals and implement game logic in scripts/.
 - The included spec.json is useful for mapping entity parameters to scene setup.
 """
@@ -164,13 +165,39 @@ Notes:
     ext_resources.append({'id': 1, 'path': 'res://scripts/main.gd', 'type': 'Script'})
     tex_id_map = {}  # filename -> ext_id
     next_id = 2
-    for name, _ in assets_to_write:
-        if name.lower().endswith('.png') or name.lower().endswith('.svg'):
-            # register texture resource for pngs and svgs (Godot can import svg in newer versions)
-            tex_path = f'res://assets/{name}'
-            tex_id_map[name] = next_id
-            ext_resources.append({'id': next_id, 'path': tex_path, 'type': 'Texture'})
-            next_id += 1
+
+    # Prefer PNGs and register textures in ascending size order so largest gets the highest id
+    # Collect png texture names and optional svg fallback
+    png_names = [name for name, _ in assets_to_write if name.lower().endswith('.png')]
+    svg_names = [name for name, _ in assets_to_write if name.lower().endswith('.svg')]
+
+    def _png_size(name):
+        # extract size from pattern base_64.png, base_128.png, etc.; fallback to 0
+        m = None
+        try:
+            m = int(name.rsplit('_', 1)[-1].split('.png')[0])
+        except Exception:
+            m = 0
+        return m
+
+    # sort pngs by size ascending (small -> large)
+    png_names_sorted = sorted(png_names, key=_png_size)
+
+    # register pngs first
+    for name in png_names_sorted:
+        tex_path = f'res://assets/{name}'
+        tex_id_map[name] = next_id
+        ext_resources.append({'id': next_id, 'path': tex_path, 'type': 'Texture'})
+        next_id += 1
+
+    # register svgs only if no pngs are available or also include them as alternatives
+    for name in svg_names:
+        if name in tex_id_map:
+            continue
+        tex_path = f'res://assets/{name}'
+        tex_id_map[name] = next_id
+        ext_resources.append({'id': next_id, 'path': tex_path, 'type': 'Texture'})
+        next_id += 1
 
     # Build main.tscn content with ext_resource declarations and Sprite nodes per entity
     header = """[gd_scene load_steps=2 format=2]
