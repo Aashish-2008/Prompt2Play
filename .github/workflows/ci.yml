@@ -35,10 +35,19 @@ jobs:
             python -m pip install --upgrade pip
           fi
 
-      - name: Run tests (if any)
+      - name: Lint with flake8 (if configured)
+        run: |
+          if command -v flake8 >/dev/null 2>&1; then
+            echo "Running flake8..."
+            flake8 || true
+          else
+            echo "flake8 not found; skipping lint"
+          fi
+
+      - name: Run tests (if any) — fail on test failures
         run: |
           if [ -f pytest.ini ] || [ -d tests ] || ls **/*_test.py 1> /dev/null 2>&1; then
-            pytest -q || true
+            pytest -q
           else
             echo "No tests found, skipping pytest"
           fi
@@ -63,7 +72,6 @@ spec = {
 }
 html = generate_game_html(spec)
 print('HTML length:', len(html))
-# Write to a file to demonstrate artifact
 with open('generated_by_ci.html','w',encoding='utf-8') as f:
     f.write(html)
 print('Wrote generated_by_ci.html')
