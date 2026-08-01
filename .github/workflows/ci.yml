@@ -63,8 +63,8 @@ jobs:
       - name: Run tests (if any) — produce JUnit XML and logs
         run: |
           if [ -f pytest.ini ] || [ -d tests ] || ls **/*_test.py 1> /dev/null 2>&1; then
-            echo "Running tests with PYTHONPATH=backend"
-            PYTHONPATH=backend pytest -q --junitxml=pytest_results.xml 2>&1 | tee test_run.log
+            echo "Running tests with PYTHONPATH=."
+            PYTHONPATH=. pytest -q --junitxml=pytest_results.xml 2>&1 | tee test_run.log
           else
             echo "No tests found, skipping pytest" > test_run.log
             echo "<?xml version='1.0' encoding='utf-8'?><testsuites><testsuite name='placeholder' tests='0'></testsuite></testsuites>" > pytest_results.xml
