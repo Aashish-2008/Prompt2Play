@@ -158,6 +158,9 @@ def _repair_llm_json(raw_text: str, user_prompt: str, model: str) -> dict | None
                         assembled += part.get('response') or ''
                     elif isinstance(part, dict) and 'output' in part:
                         assembled += part.get('output') or ''
+                    elif isinstance(part, dict):
+                        # Some endpoints stream full JSON objects per-line — append their JSON form
+                        assembled += json.dumps(part)
                 except Exception:
                     assembled += raw
         except Exception as e:
@@ -272,6 +275,9 @@ def analyze_prompt(prompt: str, strict: bool = False) -> dict:
                         elif isinstance(part, dict) and 'output' in part:
                             # fallback structures
                             assembled += part.get('output') or ''
+                        elif isinstance(part, dict):
+                            # Per-line JSON object (full) — append its JSON string
+                            assembled += json.dumps(part)
                     except Exception:
                         # Not JSON per-line, append raw text
                         assembled += raw
