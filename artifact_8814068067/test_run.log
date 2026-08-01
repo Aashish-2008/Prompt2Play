@@ -1,0 +1,39 @@
+
+==================================== ERRORS ====================================
+________________ ERROR collecting backend/debug_repair_test.py _________________
+ImportError while importing test module '/home/runner/work/Prompt2Play/Prompt2Play/backend/debug_repair_test.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+/opt/hostedtoolcache/Python/3.10.20/x64/lib/python3.10/importlib/__init__.py:126: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+backend/debug_repair_test.py:3: in <module>
+    import ollama_client
+backend/ollama_client.py:4: in <module>
+    import requests
+E   ModuleNotFoundError: No module named 'requests'
+_____________ ERROR collecting backend/tests/test_ollama_client.py _____________
+ImportError while importing test module '/home/runner/work/Prompt2Play/Prompt2Play/backend/tests/test_ollama_client.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+/opt/hostedtoolcache/Python/3.10.20/x64/lib/python3.10/importlib/__init__.py:126: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+backend/tests/test_ollama_client.py:5: in <module>
+    from ollama_client import extract_first_json, basic_rule_parse, analyze_prompt, _repair_llm_json
+backend/ollama_client.py:4: in <module>
+    import requests
+E   ModuleNotFoundError: No module named 'requests'
+_____________________ ERROR collecting tests/test_parse.py _____________________
+ImportError while importing test module '/home/runner/work/Prompt2Play/Prompt2Play/tests/test_parse.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+/opt/hostedtoolcache/Python/3.10.20/x64/lib/python3.10/importlib/__init__.py:126: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+tests/test_parse.py:5: in <module>
+    from backend import ollama_client
+E   ModuleNotFoundError: No module named 'backend'
+=========================== short test summary info ============================
+ERROR backend/debug_repair_test.py
+ERROR backend/tests/test_ollama_client.py
+ERROR tests/test_parse.py
+!!!!!!!!!!!!!!!!!!! Interrupted: 3 errors during collection !!!!!!!!!!!!!!!!!!!!
+3 errors in 0.19s

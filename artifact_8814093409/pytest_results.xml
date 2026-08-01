@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="8" time="0.259" timestamp="2026-08-01T05:46:57.571896+00:00" hostname="runnervmvrwv9"><testcase classname="backend.tests.test_ollama_client" name="test_extract_first_json_simple" time="0.000" /><testcase classname="backend.tests.test_ollama_client" name="test_basic_rule_parse_zombie" time="0.000" /><testcase classname="backend.tests.test_ollama_client" name="test_analyze_prompt_fallback_rule" time="0.001" /><testcase classname="backend.tests.test_ollama_client" name="test_repair_llm_json_from_stream" time="0.001"><failure message="assert False&#10; +  where False = isinstance(None, dict)">monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x7f6b31caf1f0&gt;
+
+    def test_repair_llm_json_from_stream(monkeypatch):
+        # Simulate a repair response that streams a JSON object as a single line
+        repaired = '{"title":"Repaired","genre":"Puzzle","player_color":"#112233","enemy_color":"#334455","theme":"X","instructions":"Do stuff"}'
+        def fake_post(url, json=None, stream=None, timeout=None):
+            return MockResp(lines=[repaired], text=repaired)
+        monkeypatch.setattr('ollama_client.requests.post', fake_post)
+        out = _repair_llm_json('{bad json}', 'user prompt', 'dummy-model')
+&gt;       assert isinstance(out, dict)
+E       assert False
+E        +  where False = isinstance(None, dict)
+
+backend/tests/test_ollama_client.py:58: AssertionError</failure></testcase><testcase classname="backend.tests.test_ollama_client" name="test_sanity_imports" time="0.000" /><testcase classname="tests.test_parse" name="test_extract_first_json_simple" time="0.000" /><testcase classname="tests.test_parse" name="test_basic_rule_parse_hole" time="0.000" /><testcase classname="tests.test_parse" name="test_analyze_prompt_fallback" time="0.001" /></testsuite></testsuites>

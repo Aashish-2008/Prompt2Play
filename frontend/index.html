@@ -34,6 +34,7 @@
           <button id="generate" class="px-4 py-2 bg-emerald-500 rounded text-slate-900 font-semibold">Generate</button>
           <button id="strictRetry" class="px-4 py-2 bg-amber-500 rounded text-slate-900" title="Retry using a stricter JSON-only prompt">Retry JSON</button>
           <button id="download" class="px-4 py-2 bg-slate-700 rounded text-slate-200" disabled>Download</button>
+          <button id="exportGodot" class="px-4 py-2 bg-violet-600 rounded text-white" disabled title="Export a Godot ZIP of this project">Export Godot</button>
                   <div id="status" class="text-slate-300 ml-3 flex items-center gap-2">
                     <svg id="spinner" class="hidden animate-spin h-5 w-5 text-emerald-400" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path></svg>
                     <span id="statusText"></span>
@@ -220,7 +221,22 @@ generateBtn.onclick = async ()=>{
       preview.src = j.preview;
       document.getElementById('download').disabled = false;
       document.getElementById('download').onclick = ()=>{ window.open(j.preview, '_blank'); };
-      await loadProjects();
+
+      // enable Godot export if spec available
+      const exportBtn = document.getElementById('exportGodot');
+      if(j.spec && exportBtn){
+        exportBtn.disabled = false;
+        exportBtn.onclick = async ()=>{
+          showSpinner('Preparing Godot ZIP...');
+          try{
+            const res = await fetch('/api/export_godot',{method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({spec: j.spec})});
+            if(!res.ok){ const err = await res.json().catch(()=>({error:'Export failed'})); alert(err.error || 'Export failed'); return; }
+            const blob = await res.blob(); const url = URL.createObjectURL(blob);
+            const a = document.createElement('a'); a.href = url; a.download = 'prompt2play_godot.zip'; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+          }catch(e){ alert('Export error: ' + e.message); }
+          finally{ hideSpinner(); }
+        };
+      }
 
       document.getElementById('statusText').textContent = 'Ready — preview below';
 
@@ -330,7 +346,11 @@ function openSpecEditor(spec){
       try{
         const res = await fetch('/api/generate', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({spec: parsed})});
         const j = await res.json();
-        if(res.ok){ preview.src = j.preview; document.getElementById('download').disabled = false; document.getElementById('download').onclick = ()=>{ window.open(j.preview, '_blank'); }; await loadProjects();
+        if(res.ok){ preview.src = j.preview; document.getElementById('download').disabled = false; document.getElementById('download').onclick = ()=>{ window.open(j.preview, '_blank'); };
+            // enable Godot export for edited spec
+            const exportBtn = document.getElementById('exportGodot');
+            if(j.spec && exportBtn){ exportBtn.disabled = false; exportBtn.onclick = async ()=>{ showSpinner('Preparing Godot ZIP...'); try{ const res2 = await fetch('/api/export_godot',{method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({spec: j.spec})}); if(!res2.ok){ const err = await res2.json().catch(()=>({error:'Export failed'})); alert(err.error || 'Export failed'); return; } const blob = await res2.blob(); const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = 'prompt2play_godot.zip'; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url); }catch(e){ alert('Export error: ' + e.message); } finally{ hideSpinner(); } }; }
+            await loadProjects();
           // update spec panel with the returned spec
           const specFields = document.getElementById('specFields'); const specRaw = document.getElementById('specRaw'); specFields.innerHTML = '';
           if(j.spec){ const keys = ['title','genre','player_color','enemy_color','theme','instructions']; for(const k of keys){ if(j.spec[k]){ const el = document.createElement('div'); el.innerHTML = `<strong>${k}:</strong> ${escapeHtml(String(j.spec[k]))}`; specFields.appendChild(el); } } specRaw.textContent = j.spec.llm_raw || '(no raw LLM text returned)'; }
@@ -359,6 +379,22 @@ if(strictBtn){
         preview.src = j.preview;
         document.getElementById('download').disabled = false;
         document.getElementById('download').onclick = ()=>{ window.open(j.preview, '_blank'); };
+
+        // enable Godot export when strict retry returns a spec
+        const exportBtn = document.getElementById('exportGodot');
+        if(j.spec && exportBtn){
+          exportBtn.disabled = false;
+          exportBtn.onclick = async ()=>{
+            showSpinner('Preparing Godot ZIP...');
+            try{
+              const res2 = await fetch('/api/export_godot',{method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({spec: j.spec})});
+              if(!res2.ok){ const err = await res2.json().catch(()=>({error:'Export failed'})); alert(err.error || 'Export failed'); return; }
+              const blob = await res2.blob(); const url = URL.createObjectURL(blob);
+              const a = document.createElement('a'); a.href = url; a.download = 'prompt2play_godot.zip'; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+            }catch(e){ alert('Export error: ' + e.message); }
+            finally{ hideSpinner(); }
+          };
+        }
         await loadProjects();
 
         // update spec panel
