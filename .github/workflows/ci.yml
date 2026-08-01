@@ -5,6 +5,12 @@ on:
     branches: [ main ]
   pull_request:
     branches: [ main ]
+  workflow_dispatch:
+    inputs:
+      enable_cairosvg:
+        description: 'Set to true to install cairo system deps and cairosvg in CI'
+        required: false
+        default: 'false'
 
 jobs:
   test-and-generate:
