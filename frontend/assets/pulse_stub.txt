@@ -1,0 +1,1 @@
+Placeholder audio stub: replace with pulse.wav or pulse.ogg for the attract/pulse sound used by the Hole prototype.
