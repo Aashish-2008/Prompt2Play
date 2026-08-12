@@ -158,7 +158,11 @@ def _repair_llm_json(raw_text: str, user_prompt: str, model: str) -> dict | None
                         assembled += part.get('response') or ''
                     elif isinstance(part, dict) and 'output' in part:
                         assembled += part.get('output') or ''
+                    else:
+                        # JSON line without wrapper fields — append its text
+                        assembled += raw
                 except Exception:
+                    # Not JSON per-line, append raw text
                     assembled += raw
         except Exception as e:
             logger.debug(f'_repair_llm_json: stream iter_lines failed: {e}')
@@ -272,6 +276,9 @@ def analyze_prompt(prompt: str, strict: bool = False) -> dict:
                         elif isinstance(part, dict) and 'output' in part:
                             # fallback structures
                             assembled += part.get('output') or ''
+                        else:
+                            # JSON line without wrapper fields — append its text
+                            assembled += raw
                     except Exception:
                         # Not JSON per-line, append raw text
                         assembled += raw
