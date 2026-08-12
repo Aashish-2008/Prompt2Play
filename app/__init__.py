@@ -30,4 +30,9 @@ def create_app(config_class=Config):
     with app.app_context():
         db.create_all()
 
+    @app.route('/api/health')
+    def health():
+        from flask import jsonify
+        return jsonify({'status': 'ok'})
+
     return app
