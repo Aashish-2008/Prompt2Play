@@ -1,0 +1,23 @@
+{% extends 'base.html' %}
+
+{% block title %}Create game | Prompt2Play{% endblock %}
+
+{% block content %}
+<section class="card form-card">
+  <h2>Design a new game</h2>
+  <form method="post" novalidate>
+    {{ form.hidden_tag() }}
+    <div class="field">
+      {{ form.title.label }}
+      {{ form.title() }}
+      {% for error in form.title.errors %}<span class="error">{{ error }}</span>{% endfor %}
+    </div>
+    <div class="field">
+      {{ form.prompt_text.label }}
+      {{ form.prompt_text(rows=8) }}
+      {% for error in form.prompt_text.errors %}<span class="error">{{ error }}</span>{% endfor %}
+    </div>
+    {{ form.submit(class_='button primary full-width') }}
+  </form>
+</section>
+{% endblock %}

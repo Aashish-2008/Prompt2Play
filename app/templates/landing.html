@@ -1,0 +1,33 @@
+{% extends 'base.html' %}
+
+{% block title %}Prompt2Play | Generate a game from a prompt{% endblock %}
+
+{% block content %}
+<section class="hero">
+  <div>
+    <p class="eyebrow">AI-powered 2D game generator</p>
+    <h1>One prompt. One playable game.</h1>
+    <p class="lede">
+      Describe your game idea and Prompt2Play turns it into a structured specification,
+      validates it, and generates a Godot 4 project skeleton ready for export.
+    </p>
+    <div class="cta-row">
+      <a class="button primary" href="{{ url_for('auth.register') }}">Create free account</a>
+      <a class="button secondary" href="{{ url_for('auth.login') }}">Log in</a>
+    </div>
+  </div>
+
+  <div class="feature-panel">
+    <h3>Example prompt</h3>
+    <p>
+      "A top-down zombie survival game where the player collects medical kits, avoids swarms,
+      survives five waves, and wins by reaching a safe house."
+    </p>
+    <ul>
+      <li>Natural-language prompt parsing</li>
+      <li>Godot-ready generation</li>
+      <li>ZIP export</li>
+    </ul>
+  </div>
+</section>
+{% endblock %}
