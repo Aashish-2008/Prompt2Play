@@ -1,0 +1,24 @@
+{% extends 'base.html' %}
+
+{% block title %}Login | Prompt2Play{% endblock %}
+
+{% block content %}
+<section class="card auth-form">
+  <h2>Log in</h2>
+  <form method="post" novalidate>
+    {{ form.hidden_tag() }}
+    <div class="field">
+      {{ form.email.label }}
+      {{ form.email() }}
+      {% for error in form.email.errors %}<span class="error">{{ error }}</span>{% endfor %}
+    </div>
+    <div class="field">
+      {{ form.password.label }}
+      {{ form.password() }}
+      {% for error in form.password.errors %}<span class="error">{{ error }}</span>{% endfor %}
+    </div>
+    {{ form.submit(class_='button primary full-width') }}
+  </form>
+  <p class="muted">Need an account? <a href="{{ url_for('auth.register') }}">Register here</a>.</p>
+</section>
+{% endblock %}

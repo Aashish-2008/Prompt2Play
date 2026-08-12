@@ -1,6 +1,10 @@
-venv/
 __pycache__/
 *.pyc
-generated_games/
+*.pyo
+*.pyd
 .venv/
-.env
+venv/
+instance/*.db
+instance/generated/
+.pytest_cache/
+.DS_Store

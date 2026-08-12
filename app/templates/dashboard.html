@@ -1,0 +1,35 @@
+{% extends 'base.html' %}
+
+{% block title %}Dashboard | Prompt2Play{% endblock %}
+
+{% block content %}
+<section class="page-header">
+  <div>
+    <p class="eyebrow">Your workspace</p>
+    <h1>Game dashboard</h1>
+  </div>
+  <a class="button primary" href="{{ url_for('projects.new_project') }}">Create new game</a>
+</section>
+
+<section class="grid cards">
+  {% if projects %}
+    {% for project in projects %}
+      <article class="card project-card">
+        <p class="project-tag">{{ project.genre|title }}</p>
+        <h3>{{ project.title }}</h3>
+        <p>{{ project.short_description }}</p>
+        <div class="meta-row">
+          <span>{{ project.game_type|replace('_', ' ')|title }}</span>
+          <span>{{ project.status }}</span>
+        </div>
+        <a class="button secondary" href="{{ url_for('projects.detail', project_id=project.id) }}">Open project</a>
+      </article>
+    {% endfor %}
+  {% else %}
+    <div class="card empty-state">
+      <h3>No games yet</h3>
+      <p>Start by creating a prompt-driven game project.</p>
+    </div>
+  {% endif %}
+</section>
+{% endblock %}

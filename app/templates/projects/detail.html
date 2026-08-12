@@ -1,0 +1,38 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ project.title }} | Prompt2Play{% endblock %}
+
+{% block content %}
+<section class="page-header detail-header">
+  <div>
+    <p class="eyebrow">Project summary</p>
+    <h1>{{ project.title }}</h1>
+  </div>
+  <div class="header-actions">
+    {% if project.zip_path %}
+      <a class="button primary" href="{{ url_for('projects.download_project', project_id=project.id) }}">Download ZIP</a>
+    {% endif %}
+    <a class="button secondary" href="{{ url_for('dashboard.dashboard') }}">Back to dashboard</a>
+  </div>
+</section>
+
+<section class="grid two-column">
+  <article class="card">
+    <h3>Prompt</h3>
+    <p>{{ project.prompt_text }}</p>
+  </article>
+
+  <article class="card">
+    <h3>Generated spec</h3>
+    <ul class="spec-list">
+      <li><strong>Genre:</strong> {{ project.genre }}</li>
+      <li><strong>Game type:</strong> {{ project.game_type }}</li>
+      <li><strong>Objective:</strong> {{ project.objective }}</li>
+      <li><strong>Enemies:</strong> {{ project.enemies }}</li>
+      <li><strong>Items:</strong> {{ project.items }}</li>
+      <li><strong>Win:</strong> {{ project.win_condition }}</li>
+      <li><strong>Lose:</strong> {{ project.lose_condition }}</li>
+    </ul>
+  </article>
+</section>
+{% endblock %}
